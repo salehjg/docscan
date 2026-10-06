@@ -1,0 +1,20 @@
+# Build output
+/build/
+/cmake-build-*/
+compile_commands.json
+
+# Local sample photos and scans
+/docs/
+
+# makepkg output (packaging/arch)
+/packaging/arch/src/
+/packaging/arch/pkg/
+/packaging/arch/*.tar.gz
+/packaging/arch/*.pkg.tar.*
+
+# Editors and tools
+/.cache/
+/.idea/
+/.vscode/
+*.swp
+*~
