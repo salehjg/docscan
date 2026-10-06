@@ -10,7 +10,7 @@ depends=('opencv' 'texlive-basic' 'gcc-libs' 'glibc')
 makedepends=('cmake' 'cli11')
 checkdepends=('catch2')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP') # replace with the real sum after tagging: updpkgsums
+sha256sums=('d278f0251a22d2654babcb7f141d15165cd0b3a8f9d0165800752b63b64a63c3')
 
 build() {
   cmake -B build -S "$pkgname-$pkgver" \
