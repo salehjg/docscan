@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 project(docscan
-    VERSION 0.1.0
+    VERSION 0.2.0
     DESCRIPTION "Turn photos of documents into clean, straight PDF pages"
     LANGUAGES CXX)
 

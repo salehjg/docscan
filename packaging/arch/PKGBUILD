@@ -1,6 +1,6 @@
 # Maintainer: saleh <salehjamaligolzar@gmail.com>
 pkgname=docscan
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc='Turn photos of documents into clean, straight PDF pages, like Microsoft Lens'
 arch=('x86_64' 'aarch64')
@@ -12,7 +12,7 @@ checkdepends=('catch2')
 _uvdoc=4c9b82b537057aff2526e6dd118a847cdd072e82
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
         "uvdoc-${_uvdoc::7}.pkl::https://github.com/tanguymagne/UVDoc/raw/$_uvdoc/model/best_model.pkl")
-sha256sums=('d278f0251a22d2654babcb7f141d15165cd0b3a8f9d0165800752b63b64a63c3'
+sha256sums=('SKIP' # replace with the real sum after tagging: updpkgsums
             '7e90861b8a516eb4bc51f84bd889cb77275743d2d1d3ca8091951ec9f2b7da23')
 
 build() {
