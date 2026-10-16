@@ -12,16 +12,24 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 option(DOCSCAN_BUILD_TESTS "Build the unit tests (needs Catch2)" OFF)
+set(DOCSCAN_UVDOC_MODEL "" CACHE FILEPATH
+    "UVDoc weights (model/best_model.pkl from github.com/tanguymagne/UVDoc) to install for the crop filter")
 
 find_package(OpenCV 5 REQUIRED COMPONENTS core imgproc imgcodecs photo geometry)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(Threads REQUIRED)
+find_package(OpenMP REQUIRED COMPONENTS CXX)
+find_package(CURL 7.85 REQUIRED)
+find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+
+include(GNUInstallDirs)
 
 configure_file(src/Version.hpp.in generated/Version.hpp @ONLY)
 
 add_library(docscan_core STATIC
     src/app/Application.cpp
     src/app/CommandLine.cpp
+    src/core/Download.cpp
     src/core/FilterSpec.cpp
     src/core/Log.cpp
     src/core/Settings.cpp
@@ -42,6 +50,9 @@ add_library(docscan_core STATIC
     src/filters/ResizeFilter.cpp
     src/filters/RotateFilter.cpp
     src/filters/SharpenFilter.cpp
+    src/ml/Conv2d.cpp
+    src/ml/TorchCheckpoint.cpp
+    src/ml/UVDocNet.cpp
     src/pipeline/DebugWriter.cpp
     src/pipeline/Inputs.cpp
     src/pipeline/Pipeline.cpp
@@ -52,19 +63,27 @@ add_library(docscan_core STATIC
     src/vision/ContourPageFinder.cpp
     src/vision/EdgeSnapper.cpp
     src/vision/Imaging.cpp
+    src/vision/MeshSnapper.cpp
+    src/vision/PageMesh.cpp
     src/vision/Quad.cpp
+    src/vision/UVDocPageFinder.cpp
 )
 target_include_directories(docscan_core PUBLIC src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_include_directories(docscan_core SYSTEM PUBLIC ${OpenCV_INCLUDE_DIRS})
-target_link_libraries(docscan_core PUBLIC ${OpenCV_LIBS} Threads::Threads PRIVATE CLI11::CLI11)
+target_link_libraries(docscan_core PUBLIC ${OpenCV_LIBS} Threads::Threads PRIVATE CLI11::CLI11 OpenMP::OpenMP_CXX
+    CURL::libcurl OpenSSL::Crypto)
 target_compile_options(docscan_core PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(docscan_core PRIVATE DOCSCAN_DATA_DIR="${CMAKE_INSTALL_FULL_DATADIR}/docscan")
 
 add_executable(docscan src/main.cpp)
 target_link_libraries(docscan PRIVATE docscan_core)
 target_compile_options(docscan PRIVATE -Wall -Wextra -Wpedantic)
 
-include(GNUInstallDirs)
 install(TARGETS docscan RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(DOCSCAN_UVDOC_MODEL)
+    install(FILES "${DOCSCAN_UVDOC_MODEL}" DESTINATION ${CMAKE_INSTALL_DATADIR}/docscan RENAME uvdoc.pkl)
+    install(FILES third_party/UVDoc/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/docscan RENAME uvdoc-LICENSE)
+endif()
 
 if(DOCSCAN_BUILD_TESTS)
     enable_testing()

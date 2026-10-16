@@ -9,6 +9,7 @@
 #include "pipeline/DebugWriter.hpp"
 #include "pipeline/Inputs.hpp"
 #include "pipeline/Scanner.hpp"
+#include "vision/UVDocPageFinder.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -69,6 +70,9 @@ void Application::execute(const Options& options)
     Log::setLevel(options.quiet     ? Log::Level::Quiet
                   : options.verbose ? Log::Level::Verbose
                                     : Log::Level::Normal);
+    // The crop filter fetches the UVDoc weights on first use, but only for a real scan, not a dry run or a
+    // command missing its photos.
+    UVDocPageFinder::allowDownload(!options.dryRun && !options.inputs.empty());
     if (options.listFilters) {
         printFilters();
         return;

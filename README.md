@@ -2,8 +2,8 @@
 
 Turn phone photos of documents into clean, straight PDF pages from the command line, the way
 Microsoft Lens did on Android. docscan finds the page in each photo, cuts away the background,
-undoes the perspective, evens out the lighting and contrast, optionally makes the page gray or
-black & white, and builds one PDF with pdfTeX.
+undoes the perspective (and, with the UVDoc network, flattens curled and folded pages), evens out the
+lighting and contrast, optionally makes the page gray or black & white, and builds one PDF with pdfTeX.
 
 ```sh
 docscan photos/ -o notes.pdf
@@ -17,13 +17,33 @@ From the AUR:
 yay -S docscan        # or any AUR helper, or makepkg -si in packaging/arch
 ```
 
-From source (needs `opencv`, `cli11`, `cmake`, and `texlive-basic` at runtime):
+From source (needs `opencv`, `cli11`, `curl`, `openssl`, `cmake`, and `texlive-basic` at runtime):
 
 ```sh
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 sudo cmake --install build
 ```
+
+### The UVDoc model
+
+To find the page, docscan works best with the neural network of
+[UVDoc](https://github.com/tanguymagne/UVDoc) (MIT license): it finds pages that fill the whole photo
+or run off its edges, and it flattens curled and folded pages. docscan runs it on the CPU itself, with no
+Python or PyTorch, in about a tenth of a second per page. The AUR package installs it. Built from source,
+docscan downloads the trained weights (32 MB) the first time it scans photos, checks their SHA-256 and keeps
+them in `~/.local/share/docscan/uvdoc.pkl` (`$XDG_DATA_HOME/docscan`), so this needs no root access and later
+scans work offline. To install the weights with docscan instead, or to download them yourself:
+
+```sh
+curl -LO https://github.com/tanguymagne/UVDoc/raw/4c9b82b537057aff2526e6dd118a847cdd072e82/model/best_model.pkl
+cmake -B build -DDOCSCAN_UVDOC_MODEL=$PWD/best_model.pkl     # installed as <prefix>/share/docscan/uvdoc.pkl
+# or
+install -Dm644 best_model.pkl ~/.local/share/docscan/uvdoc.pkl
+```
+
+Without the model (when the download fails, or with `-s crop.method=contour`), `crop` looks for the page's
+four straight edges instead.
 
 ## Usage
 
@@ -54,7 +74,7 @@ while `-f resize:1000 -f bw` scales first and keeps the page pure black & white.
 
 | filter | does | settings (default) |
 |---|---|---|
-| `crop` | find the page, cut away the background, straighten it | `aspect` (auto, a4, letter, legal or a ratio), `trim` (0.5 %) |
+| `crop` | find the page, cut away the background, straighten it | `aspect` (auto, a4, letter, legal or a ratio), `trim` (0.5 %), `method` (auto, uvdoc, contour), `model` (UVDoc weights file) |
 | `light` | even out lighting and shadows, make the paper white | `strength` (1) |
 | `contrast` | stretch levels: ink black, paper white | `amount` (1), `clip` (1 %) |
 | `gray` | grayscale | |
@@ -74,7 +94,8 @@ See `docscan -h`, `docscan --filters` and `docscan --profiles`.
 src/app        command line (CLI11) and the program flow
 src/core       errors, filter specs ("resize:max=1600"), typed and validated settings, logging
 src/filters    one class per filter, and the FilterRegistry that creates them by name
-src/vision     page detection, edge snapping, perspective geometry, binarization
+src/ml         the UVDoc network on the CPU: PyTorch checkpoint reader, convolutions (OpenMP, AVX2)
+src/vision     page detection (UVDoc mesh or contours), edge snapping, perspective geometry, binarization
 src/pipeline   Pipeline, PipelineBuilder (profile + -f/-x/-a/-s), profiles, the parallel Scanner
 src/export     PDF via pdfTeX, image export, page layout
 ```
@@ -107,4 +128,6 @@ New profiles are one line each in `ProfileRegistry::builtin()`.
 
 ## License
 
-GPL-3.0-or-later; see [LICENSE](LICENSE).
+GPL-3.0-or-later; see [LICENSE](LICENSE). The UVDoc network and its trained weights are by Floor Verhoeven,
+Tanguy Magne and Olga Sorkine-Hornung ("UVDoc: Neural Grid-based Document Unwarping", SIGGRAPH Asia 2023),
+under the MIT license in [third_party/UVDoc/LICENSE](third_party/UVDoc/LICENSE).

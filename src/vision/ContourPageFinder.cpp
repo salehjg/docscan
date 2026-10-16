@@ -20,6 +20,11 @@ constexpr double kMinArea = 0.15;      // smallest page, as a fraction of the ph
 constexpr double kMinCornerAngle = 45; // degrees; perspective rarely bends a corner further
 constexpr double kMaxCornerAngle = 135;
 constexpr int kSamplesPerSide = 50;
+constexpr float kPaperReach = 0.015f; // how far inside and outside a side paper and background are compared,
+                                      // as a fraction of the long side
+constexpr float kMinPaperStep = 10;   // whiteness the paper must have over what lies just outside it, lost
+                                      // within a few pixels at its edge (shadows fade out slowly)
+constexpr double kMinPaperEdge = 0.5; // share of every side that must look like the edge of the paper
 
 using Contour = std::vector<cv::Point>;
 
@@ -79,28 +84,63 @@ bool hasPlausibleCorners(const Quad& quad)
     return true;
 }
 
-/// Fraction of the page's sides (those not on the photo border) that run along detected edges.
+/// Whether `white` steps down sharply from paper to a darker outside near `p`, looking up to `reach` pixels
+/// either way along `outward`; both ends of that search must lie in the image.
+bool paperEndsNear(const cv::Mat& white, cv::Point2f p, cv::Point2f outward, float reach)
+{
+    const auto at = [&](float offset) { return float(white.at<uchar>(cv::Point(p + outward * offset))); };
+    if (at(-reach) < at(reach) + kMinPaperStep)
+        return false;
+    for (float offset = 2 - reach; offset <= reach - 2; offset += 1) {
+        if (at(offset - 2) >= at(offset + 2) + kMinPaperStep)
+            return true;
+    }
+    return false;
+}
+
+/// How well a candidate page outline follows the real edges of the paper.
+struct SideEvidence {
+    double edgeFit;   ///< share of the points along the sides that lie on detected edges
+    double paperEdge; ///< share of the weakest side that runs along an edge or where whiter paper meets a darker outside
+};
+
+/// Evidence from the page's sides that are not on the photo border.
 /// Empty when every side lies on the border: then the "page" is just the photo itself.
-std::optional<double> edgeSupport(const Quad& quad, const cv::Mat& edges)
+std::optional<SideEvidence> sideEvidence(const Quad& quad, const cv::Mat& edges, const cv::Mat& white)
 {
     const cv::Rect bounds({}, edges.size());
+    const float reach = kPaperReach * float(std::max(edges.cols, edges.rows));
     int samples = 0;
     int hits = 0;
+    double weakest = 1;
     const auto& c = quad.corners();
     for (std::size_t i = 0; i < 4; ++i) {
         if (quad.sideOnBorder(i, edges.size()))
             continue;
         const cv::Point2f a = c[i];
         const cv::Point2f b = c[(i + 1) % 4];
+        const cv::Point2f along = (b - a) / float(cv::norm(b - a));
+        const cv::Point2f outward(along.y, -along.x); // corners run clockwise on screen
+        int compared = 0;
+        int steps = 0;
         for (int s = 0; s <= kSamplesPerSide; ++s) {
-            const cv::Point p = a + (b - a) * (float(s) / kSamplesPerSide);
+            const cv::Point2f p = a + (b - a) * (float(s) / kSamplesPerSide);
+            const bool onEdge = bounds.contains(p) && edges.at<uchar>(p) != 0;
             ++samples;
-            hits += bounds.contains(p) && edges.at<uchar>(p) != 0;
+            hits += onEdge;
+
+            // A line drawn across the page, through text, tables or shadows, has paper on both sides and few edges.
+            if (!bounds.contains(cv::Point(p - outward * reach)) || !bounds.contains(cv::Point(p + outward * reach)))
+                continue; // the side runs along the photo border here
+            ++compared;
+            steps += onEdge || paperEndsNear(white, p, outward, reach);
         }
+        if (compared > kSamplesPerSide / 2)
+            weakest = std::min(weakest, double(steps) / compared);
     }
     if (samples == 0)
         return std::nullopt;
-    return double(hits) / samples;
+    return SideEvidence{double(hits) / samples, weakest};
 }
 
 } // namespace
@@ -112,6 +152,7 @@ std::optional<Quad> ContourPageFinder::find(const cv::Mat& image) const
     const double photoArea = double(small.total());
 
     cv::Mat edges = edgeMap(eraseDetail(toGray(small)));
+    const cv::Mat white = eraseDetail(whiteness(small));
     cv::Mat support;
     cv::dilate(edges, support, structuringElement(5));
 
@@ -132,10 +173,10 @@ std::optional<Quad> ContourPageFinder::find(const cv::Mat& image) const
         const double area = quad.area() / photoArea;
         if (area < kMinArea || !hasPlausibleCorners(quad))
             continue;
-        const auto fit = edgeSupport(quad, support);
-        if (!fit)
+        const auto evidence = sideEvidence(quad, support, white);
+        if (!evidence || evidence->paperEdge < kMinPaperEdge)
             continue;
-        const double score = area * (0.3 + 0.7 * *fit);
+        const double score = area * (0.3 + 0.7 * evidence->edgeFit);
         if (score > bestScore) {
             best = quad;
             bestScore = score;
